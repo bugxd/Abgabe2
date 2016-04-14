@@ -1,72 +1,79 @@
 package ab2.impl.Nachnamen;
 
 import java.math.BigInteger;
-import java.util.HashSet;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
 import ab2.ElGamalSig;
-import com.sun.org.apache.xpath.internal.SourceTree;
+import sun.plugin2.message.Message;
 
 public class ElGamalSigImpl implements ElGamalSig {
 
 	@Override
 	public BigInteger generatePrime(int n) {
-		BigInteger one = new BigInteger("1");
-		BigInteger q = new BigInteger(n + "");
-		BigInteger p = q.multiply(new BigInteger(2+"")).add(BigInteger.ONE);
-		//p = 2q+1
 
-		do {
-			q = q.add(one);
-			while (!q.isProbablePrime(99)){
-				q = q.add(one);
-			}
-			p = q.multiply(new BigInteger(2+"")).add(BigInteger.ONE);
+		Random rnd = new Random();
+		BigInteger q;
+		BigInteger p;
 
-		}while(!p.isProbablePrime(99));
+		while (true)
+		{
+			q = BigInteger.probablePrime(n, rnd);
+			p = q.add(q).add(BigInteger.ONE);
 
-		return p;
+			if (p.isProbablePrime(100))
+				return p;
+		}
 	}
 
 	@Override
 	public BigInteger generateGenerator(BigInteger p) {
 		Random r = new Random();
 
-		int numtries = 0;
+		BigInteger a;
+		BigInteger two = BigInteger.ONE.add(BigInteger.ONE);
 
-		// Try finding a generator at random 100 times.
-		while (numtries < 1000) {
+		while (true)
+		{
+			a = new BigInteger(p.bitLength(), r);
 
-			// Here's what we're trying as the generator this time.
-			BigInteger rand = new BigInteger(p.bitCount()-1,r);
-
-			BigInteger exp = BigInteger.ONE;
-			BigInteger next = rand.mod(p);
-
-			// We exponentiate our generator until we get 1 mod p.
-			while (!next.equals(BigInteger.ONE)) {
-				next = (next.multiply(rand)).mod(p);
-				exp = exp.add(BigInteger.ONE);
+			if (a.compareTo(p) < 0)
+			{
+				if (a.modPow(two, p).compareTo(BigInteger.ONE) != 0)
+				{
+					if (a.modPow(p, p).compareTo(BigInteger.ONE) != 0)
+					{
+						return a;
+					}
+				}
 			}
-
-			// If the first time we hit 1 is the exponent p-1, then we have
-			// a generator.
-			if (exp.equals(p.subtract(BigInteger.ONE)))
-				return rand;
 		}
-
-		// None of the 1000 values we tried was a generator.
-		return null;
 	}
 
+
+	public BigInteger keyHelperMethod(BigInteger p)
+	{
+		Random rnd = new Random();
+		BigInteger returnKey = null;
+
+		boolean returnKeyFound = false;
+
+		while (!returnKeyFound)
+		{
+			returnKey = new BigInteger(p.bitLength(), rnd);
+			if (returnKey.compareTo(BigInteger.ONE) > 0 && returnKey.compareTo(p.subtract(BigInteger.ONE)) < 0)
+				returnKeyFound = true;
+		}
+
+		return returnKey;
+	}
+
+
 	@Override
-	public BigInteger generatePrivatePart(BigInteger p) {
-		Random r = new Random();
-		BigInteger a;
-		do{
-			a = new BigInteger(p.bitCount()-1, r);
-		}while(a.compareTo(BigInteger.ONE) < 1);
-		return a;
+	public BigInteger generatePrivatePart(BigInteger p)
+	{
+		return keyHelperMethod(p);
 	}
 
 	@Override
@@ -83,14 +90,18 @@ public class ElGamalSigImpl implements ElGamalSig {
 
 		do {
 			do {
+
 				// pick a random k.
-				k = new BigInteger(p.bitCount() - 1, rand);
+				k = keyHelperMethod(p);
 				h = k.gcd(pMinusOne);
 				//found if ggt(k, p-1) not 1 and k > 1
-			} while (h.compareTo(BigInteger.ONE) == 0 && k.compareTo(BigInteger.ONE) < 1);
+			} while (h.compareTo(BigInteger.ONE) != 0);
 			System.out.println("k : " + k);
 
 			//calc r = (r^k) mod p
+			System.out.println("g : " + g);
+			System.out.println("p : " + p);
+
 			r = g.modPow(k, p);
 			System.out.println("r : " + r);
 
@@ -98,19 +109,35 @@ public class ElGamalSigImpl implements ElGamalSig {
 			BigInteger m = new BigInteger(1, message);
 			System.out.println("m : " + m);
 
-			//generate message hash
-			BigInteger hm = BigInteger.valueOf(m.hashCode());
+			byte[] asdf = null;
+			try {
+				MessageDigest md = MessageDigest.getInstance("SHA");
+				md.update(message);
+				asdf = md.digest();
+
+			} catch (NoSuchAlgorithmException e) {
+				e.printStackTrace();
+			}
+
+			BigInteger hm = new BigInteger(1, asdf);
+
 			System.out.println("hash m : " + hm);
+			////generate message hash
+			//BigInteger hm = BigInteger.valueOf(m.hashCode());
+			//System.out.println("hash m : " + hm);
 
 			//generate signature
 			BigInteger dmr = d.multiply(r);
 			BigInteger hmmdr = hm.subtract(dmr);
-			BigInteger kpm1 = k.modInverse(p);
+			BigInteger kpm1 = k.modInverse(pMinusOne);
 			s = hmmdr.multiply(kpm1);
 			s = s.mod(pMinusOne);
 			System.out.println("s : " + s);
 			//if s = 0 try again
 		}while(s.compareTo(BigInteger.ZERO) == 0);
+
+
+
 
 		return new ElGamalSignature(r.toByteArray(), s.toByteArray());
 	}
@@ -120,7 +147,6 @@ public class ElGamalSigImpl implements ElGamalSig {
 
 		BigInteger r =new BigInteger(1, sig.getR());
 		BigInteger s =new BigInteger(1, sig.getS());
-		BigInteger m =new BigInteger(1, message);
 
 		int res = r.compareTo(BigInteger.ZERO);
 
@@ -166,8 +192,22 @@ public class ElGamalSigImpl implements ElGamalSig {
 			return false;
 		}
 
+		byte[] asdf = null;
+		try {
+			MessageDigest md = MessageDigest.getInstance("SHA");
+			md.update(message);
+			asdf = md.digest();
+
+		} catch (NoSuchAlgorithmException x) {
+			x.printStackTrace();
+		}
+
+		BigInteger hm = new BigInteger(1, asdf);
+
+		System.out.println("hash m : " + hm);
+
 		//generate message hash
-		BigInteger hm = BigInteger.valueOf(m.hashCode());
+		//BigInteger hm = BigInteger.valueOf(m.hashCode());
 		//calculate g^H(m)
 		BigInteger x = g.modPow(hm,p);
 
