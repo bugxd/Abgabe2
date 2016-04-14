@@ -93,7 +93,7 @@ public class SigTest {
 
 	@Test
 	public void testBadSignature1() {
-
+//test
 		byte[] message = "Das ist ein SysSec-Test".getBytes();
 
 		BigInteger p = tools.generatePrime(BIT_LENGTH);
