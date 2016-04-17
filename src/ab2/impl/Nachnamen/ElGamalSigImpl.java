@@ -6,7 +6,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
 import ab2.ElGamalSig;
-import sun.plugin2.message.Message;
 
 public class ElGamalSigImpl implements ElGamalSig {
 
@@ -19,11 +18,14 @@ public class ElGamalSigImpl implements ElGamalSig {
 
 		while (true)
 		{
+			// generate prime number q with given bit length
 			q = BigInteger.probablePrime(n, rnd);
+			// calculate p = 2q + 1
 			p = q.add(q).add(BigInteger.ONE);
 
-			if (p.isProbablePrime(100))
-				return p;
+			// check, if p is prime
+			if (p.isProbablePrime(100)) // if p is prime, then ...
+				return p;				// return p
 		}
 	}
 
@@ -36,22 +38,26 @@ public class ElGamalSigImpl implements ElGamalSig {
 
 		while (true)
 		{
+			// create a (random) prime with same bitlength as p
 			a = new BigInteger(p.bitLength(), r);
 
+			// a has to be smaller than p
 			if (a.compareTo(p) < 0)
 			{
+				// a^2 mod p must not be 1, because then it would be either 1 or p-1
 				if (a.modPow(two, p).compareTo(BigInteger.ONE) != 0)
 				{
+					// if a^p mod p is not 1 ...
 					if (a.modPow(p, p).compareTo(BigInteger.ONE) != 0)
 					{
-						return a;
+						return a; // then return a
 					}
 				}
 			}
 		}
 	}
 
-
+	// this method returns for a given p a random integer between 2 and p-2
 	public BigInteger keyHelperMethod(BigInteger p)
 	{
 		Random rnd = new Random();
@@ -83,7 +89,7 @@ public class ElGamalSigImpl implements ElGamalSig {
 
 	@Override
 	public ElGamalSignature sign(byte[] message, BigInteger p, BigInteger g, BigInteger d) {
-		Random rand = new Random();
+
 		BigInteger k ,r ,s ,h;
 		BigInteger pMinusOne = p.subtract(BigInteger.ONE);
 		// When we send a message
@@ -93,53 +99,50 @@ public class ElGamalSigImpl implements ElGamalSig {
 
 				// pick a random k.
 				k = keyHelperMethod(p);
+
+				// calculate ggt(k, p-1)
 				h = k.gcd(pMinusOne);
-				//found if ggt(k, p-1) not 1 and k > 1
+				//found if ggt(k, p-1) not 1 and k > 1 (guaranteed by keyHelperMethod)
 			} while (h.compareTo(BigInteger.ONE) != 0);
-			System.out.println("k : " + k);
 
 			//calc r = (r^k) mod p
-			System.out.println("g : " + g);
-			System.out.println("p : " + p);
-
 			r = g.modPow(k, p);
-			System.out.println("r : " + r);
 
-			//message bytes to BigInteger
-			BigInteger m = new BigInteger(1, message);
-			System.out.println("m : " + m);
+			// hash message
+			byte[] hashedMessage = hashBytes(message);
 
-			byte[] asdf = null;
-			try {
-				MessageDigest md = MessageDigest.getInstance("SHA");
-				md.update(message);
-				asdf = md.digest();
+			// store hashed message in BigInteger
+			BigInteger hm = new BigInteger(1, hashedMessage);
 
-			} catch (NoSuchAlgorithmException e) {
-				e.printStackTrace();
-			}
+			//generate signature s = ( H(m) - d*r) * k^-1 (mod p-1)
+			BigInteger dmr = d.multiply(r);   // d*r
+			BigInteger hmmdr = hm.subtract(dmr);  // H(m) - d*r
+			BigInteger kpm1 = k.modInverse(pMinusOne);  // k^-1
+			s = hmmdr.multiply(kpm1);   // ( H(m) - d*r) * k^-1
+			s = s.mod(pMinusOne);		// ( H(m) - d*r) * k^-1 (mod p-1)
 
-			BigInteger hm = new BigInteger(1, asdf);
 
-			System.out.println("hash m : " + hm);
-			////generate message hash
-			//BigInteger hm = BigInteger.valueOf(m.hashCode());
-			//System.out.println("hash m : " + hm);
-
-			//generate signature
-			BigInteger dmr = d.multiply(r);
-			BigInteger hmmdr = hm.subtract(dmr);
-			BigInteger kpm1 = k.modInverse(pMinusOne);
-			s = hmmdr.multiply(kpm1);
-			s = s.mod(pMinusOne);
-			System.out.println("s : " + s);
 			//if s = 0 try again
 		}while(s.compareTo(BigInteger.ZERO) == 0);
 
-
-
-
 		return new ElGamalSignature(r.toByteArray(), s.toByteArray());
+	}
+
+	// this method hashes input byte array via SHA and returns the hash value as byte array
+	private byte[] hashBytes(byte[] message)
+	{
+		byte[] returnArray;
+
+		try {
+			MessageDigest md = MessageDigest.getInstance("SHA");
+			md.update(message);
+			returnArray = md.digest();
+			return returnArray;
+
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 	@Override
@@ -192,22 +195,9 @@ public class ElGamalSigImpl implements ElGamalSig {
 			return false;
 		}
 
-		byte[] asdf = null;
-		try {
-			MessageDigest md = MessageDigest.getInstance("SHA");
-			md.update(message);
-			asdf = md.digest();
+		byte[] hashedMessage = hashBytes(message);
+		BigInteger hm = new BigInteger(1, hashedMessage);
 
-		} catch (NoSuchAlgorithmException x) {
-			x.printStackTrace();
-		}
-
-		BigInteger hm = new BigInteger(1, asdf);
-
-		System.out.println("hash m : " + hm);
-
-		//generate message hash
-		//BigInteger hm = BigInteger.valueOf(m.hashCode());
 		//calculate g^H(m)
 		BigInteger x = g.modPow(hm,p);
 
@@ -221,7 +211,6 @@ public class ElGamalSigImpl implements ElGamalSig {
 		if(x.equals(y)){
 			return true;
 		}
-
 
 		return false;
 	}
